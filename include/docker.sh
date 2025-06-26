@@ -7,6 +7,7 @@
 # Project home page:
 #       https://oneinstack.com
 #       https://github.com/oneinstack/oneinstack
+# https://blog.csdn.net/yimtcode/article/details/143192479
 
 Install_Docker() {
   pushd ${oneinstack_dir}/include > /dev/null

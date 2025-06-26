@@ -53,6 +53,8 @@ Install_Nginx() {
     /bin/cp ../config/nginx_apache.conf ${nginx_install_dir}/conf/nginx.conf
   elif { [[ ${tomcat_option} =~ ^[1-4]$ ]] || [ -e "${tomcat_install_dir}/conf/server.xml" ]; } && { [[ ! ${php_option} =~ ^[1-9]$|^1[0-1]$ ]] && [ ! -e "${php_install_dir}/bin/php" ]; }; then
     /bin/cp ../config/nginx_tomcat.conf ${nginx_install_dir}/conf/nginx.conf
+  else
+    /bin/cp ../config/nginx.conf ${nginx_install_dir}/conf/nginx.conf
   fi
   cat > ${nginx_install_dir}/conf/proxy.conf << EOF
 proxy_connect_timeout 300s;

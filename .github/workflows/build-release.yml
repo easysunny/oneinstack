@@ -1,0 +1,225 @@
+name: 构建和发布 OneinStack
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: 
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置执行权限
+      run: |
+        echo "设置脚本执行权限..."
+        chmod +x install.sh
+        chmod +x amz-docker.sh
+        chmod +x reset_db_root_password.sh
+        chmod +x uninstall.sh
+        
+        # 为include目录下的脚本设置执行权限
+        find include/ -name "*.sh" -type f -exec chmod +x {} \;
+        
+        echo "权限设置完成"
+        ls -la *.sh
+        
+    - name: 验证文件权限
+      run: |
+        echo "验证主要脚本的执行权限..."
+        test -x install.sh && echo "✓ install.sh 有执行权限" || echo "✗ install.sh 无执行权限"
+        test -x amz-docker.sh && echo "✓ amz-docker.sh 有执行权限" || echo "✗ amz-docker.sh 无执行权限"
+        test -x reset_db_root_password.sh && echo "✓ reset_db_root_password.sh 有执行权限" || echo "✗ reset_db_root_password.sh 无执行权限"
+        test -x uninstall.sh && echo "✓ uninstall.sh 有执行权限" || echo "✗ uninstall.sh 无执行权限"
+        
+    - name: 创建版本信息
+      run: |
+        echo "构建时间: $(date '+%Y-%m-%d %H:%M:%S UTC')" > BUILD_INFO.txt
+        echo "Git提交: ${{ github.sha }}" >> BUILD_INFO.txt
+        echo "Git分支: ${{ github.ref_name }}" >> BUILD_INFO.txt
+        echo "构建号: ${{ github.run_number }}" >> BUILD_INFO.txt
+        cat BUILD_INFO.txt
+        
+    - name: 清理临时文件
+      run: |
+        echo "清理不需要的文件..."
+        # 删除git相关文件和临时文件
+        rm -rf .git
+        rm -rf .github
+        
+        # 删除可能存在的临时文件
+        find . -name "*.tmp" -delete
+        find . -name "*.log" -delete
+        find . -name ".DS_Store" -delete
+        
+    - name: 创建打包目录
+      run: |
+        echo "准备打包目录..."
+        cd ..
+        
+        # 创建oneinstack目录
+        mkdir -p oneinstack-package/oneinstack
+        
+        # 复制所有文件到oneinstack目录
+        cp -r oneinstack/* oneinstack-package/oneinstack/
+        
+        # 进入打包目录
+        cd oneinstack-package
+        
+        echo "打包目录内容:"
+        ls -la oneinstack/
+        
+    - name: 创建tar.gz包
+      run: |
+        cd ..
+        cd oneinstack-package
+        
+        # 获取版本信息
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+          PACKAGE_NAME="oneinstack-${VERSION}"
+        else
+          VERSION="$(date +%Y%m%d)-${{ github.sha:0:7 }}"
+          PACKAGE_NAME="oneinstack-${VERSION}"
+        fi
+        
+        echo "创建 ${PACKAGE_NAME}.tar.gz 包..."
+        
+        # 创建tar.gz包
+        tar -czf "${PACKAGE_NAME}.tar.gz" oneinstack/
+        
+        # 验证包内容
+        echo "验证tar.gz包内容:"
+        tar -tzf "${PACKAGE_NAME}.tar.gz" | head -20
+        
+        # 获取包大小
+        PACKAGE_SIZE=$(du -h "${PACKAGE_NAME}.tar.gz" | cut -f1)
+        echo "包大小: ${PACKAGE_SIZE}"
+        
+        # 移动到构建目录
+        mv "${PACKAGE_NAME}.tar.gz" ../oneinstack/
+        
+        echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+        echo "PACKAGE_SIZE=${PACKAGE_SIZE}" >> $GITHUB_ENV
+        
+    - name: 测试解压
+      run: |
+        echo "测试解压功能..."
+        
+        # 创建测试目录
+        mkdir -p test-extract
+        cd test-extract
+        
+        # 复制并解压包
+        cp "../${PACKAGE_NAME}.tar.gz" .
+        tar -xzf "${PACKAGE_NAME}.tar.gz"
+        
+        # 验证解压结果
+        echo "解压后的目录结构:"
+        ls -la
+        echo ""
+        echo "oneinstack目录内容:"
+        ls -la oneinstack/
+        
+        # 验证主要文件存在且有执行权限
+        echo ""
+        echo "验证主要脚本:"
+        test -x oneinstack/install.sh && echo "✓ install.sh 存在且可执行" || echo "✗ install.sh 问题"
+        test -x oneinstack/amz-docker.sh && echo "✓ amz-docker.sh 存在且可执行" || echo "✗ amz-docker.sh 问题"
+        test -f oneinstack/options.conf && echo "✓ options.conf 存在" || echo "✗ options.conf 缺失"
+        test -d oneinstack/include && echo "✓ include目录存在" || echo "✗ include目录缺失"
+        test -d oneinstack/config && echo "✓ config目录存在" || echo "✗ config目录缺失"
+        
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.PACKAGE_NAME }}
+        path: ${{ env.PACKAGE_NAME }}.tar.gz
+        retention-days: 30
+        
+    - name: 生成发布说明
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        cat > RELEASE_NOTES.md << EOF
+        # OneinStack ${{ github.ref_name }} 发布
+        
+        ## 📦 安装包信息
+        - **文件名**: ${PACKAGE_NAME}.tar.gz
+        - **文件大小**: ${PACKAGE_SIZE}
+        - **构建时间**: $(date '+%Y-%m-%d %H:%M:%S UTC')
+        - **Git提交**: ${{ github.sha }}
+        
+        ## 🚀 使用方法
+        
+        ### 1. 下载和解压
+        \`\`\`bash
+        # 下载解压包
+        wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${PACKAGE_NAME}.tar.gz
+        
+        # 解压
+        tar -xzf ${PACKAGE_NAME}.tar.gz
+        
+        # 进入目录
+        cd oneinstack
+        \`\`\`
+        
+        ### 2. 运行安装脚本
+        \`\`\`bash
+        # 标准安装
+        sudo bash install.sh
+        
+        # 或者安装Docker (Amazon Linux)
+        sudo bash amz-docker.sh
+        \`\`\`
+        
+        ## 📋 包含组件
+        - ✅ LNMP/LAMP环境安装脚本
+        - ✅ Docker安装脚本 (针对Amazon Linux优化)
+        - ✅ 数据库密码重置工具
+        - ✅ 完整卸载脚本
+        - ✅ 各种应用配置模板
+        - ✅ 系统初始化脚本
+        
+        ## 🔧 新特性
+        - 优化的Docker安装脚本，增强错误处理
+        - 改进的网络连接检查
+        - 更好的用户体验和日志输出
+        
+        ---
+        **注意**: 请确保在支持的Linux发行版上运行，建议使用CentOS 7+、Ubuntu 18.04+或Amazon Linux 2。
+        EOF
+        
+    - name: 创建Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ env.PACKAGE_NAME }}.tar.gz
+        body_path: RELEASE_NOTES.md
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 构建总结
+      run: |
+        echo ""
+        echo "🎉 构建完成!"
+        echo "📦 包名: ${PACKAGE_NAME}.tar.gz"
+        echo "📏 大小: ${PACKAGE_SIZE}"
+        echo ""
+        if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          echo "🚀 这是一个标签构建，将自动创建Release"
+        else
+          echo "📥 构建产物已上传为Artifact，可在Actions页面下载"
+        fi
+        echo ""
+        echo "✅ 解压后目录结构: oneinstack/"
+        echo "✅ 主要脚本已设置执行权限"
+        echo "✅ 包内容已验证" 

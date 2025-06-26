@@ -1,0 +1,73 @@
+name: 快速打包
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: '自定义包名 (可选)'
+        required: false
+        default: ''
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置执行权限
+      run: |
+        chmod +x install.sh amz-docker.sh reset_db_root_password.sh uninstall.sh
+        find include/ -name "*.sh" -type f -exec chmod +x {} \;
+        echo "✅ 执行权限设置完成"
+        
+    - name: 创建打包
+      run: |
+        # 确定包名
+        if [[ -n "${{ github.event.inputs.package_name }}" ]]; then
+          PACKAGE_NAME="${{ github.event.inputs.package_name }}"
+        else
+          PACKAGE_NAME="oneinstack-$(date +%Y%m%d-%H%M)"
+        fi
+        
+        echo "创建包: ${PACKAGE_NAME}.tar.gz"
+        
+        # 创建临时目录
+        mkdir -p ../temp-build/oneinstack
+        
+        # 复制文件（排除git相关）
+        rsync -av --exclude='.git' --exclude='.github' . ../temp-build/oneinstack/
+        
+        # 创建tar.gz包
+        cd ../temp-build
+        tar -czf "${PACKAGE_NAME}.tar.gz" oneinstack/
+        
+        # 移回原目录
+        mv "${PACKAGE_NAME}.tar.gz" ../oneinstack/
+        
+        echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+        
+    - name: 验证打包结果
+      run: |
+        echo "验证 ${PACKAGE_NAME}.tar.gz..."
+        
+        # 测试解压
+        mkdir test
+        cd test
+        tar -xzf "../${PACKAGE_NAME}.tar.gz"
+        
+        # 检查结构
+        echo "目录结构:"
+        ls -la oneinstack/ | head -10
+        
+        # 检查权限
+        echo "脚本权限:"
+        ls -la oneinstack/*.sh
+        
+    - name: 上传包
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.PACKAGE_NAME }}
+        path: ${{ env.PACKAGE_NAME }}.tar.gz
+        retention-days: 7 
