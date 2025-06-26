@@ -160,9 +160,11 @@ jobs:
         if [[ "${{ github.ref }}" == refs/tags/* ]]; then
           RELEASE_TITLE="OneinStack ${{ github.ref_name }} 正式发布"
           RELEASE_TYPE="🎉 正式版本"
+          TAG_NAME="${{ github.ref_name }}"
         else
           RELEASE_TITLE="OneinStack 开发版本 ${VERSION}"
           RELEASE_TYPE="🚧 开发版本"
+          TAG_NAME="dev-${VERSION}-build${{ github.run_number }}"
         fi
         
         cat > RELEASE_NOTES.md << EOF
@@ -179,12 +181,14 @@ jobs:
         ## 🚀 使用方法
 
         ### 一键安装
-        wget -c https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${PACKAGE_NAME}.tar.gz && tar -xzf oneinstack.tar.gz && ./oneinstack/install.sh 
+        \`\`\`bash
+        wget -c https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/${PACKAGE_NAME}.tar.gz && tar -xzf ${PACKAGE_NAME}.tar.gz && cd oneinstack && ./install.sh
+        \`\`\` 
 
         ### 1. 下载和解压
         \`\`\`bash
         # 下载解压包
-        wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${PACKAGE_NAME}.tar.gz
+        wget https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/${PACKAGE_NAME}.tar.gz
         
         # 解压
         tar -xzf ${PACKAGE_NAME}.tar.gz
