@@ -177,7 +177,10 @@ jobs:
         - **Git提交**: ${{ github.sha }}
         
         ## 🚀 使用方法
-        
+
+        ### 一键安装
+        wget -c https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${PACKAGE_NAME}.tar.gz && tar -xzf oneinstack.tar.gz && ./oneinstack/install.sh 
+
         ### 1. 下载和解压
         \`\`\`bash
         # 下载解压包
@@ -200,7 +203,6 @@ jobs:
         \`\`\`
         
         ## 📋 包含组件
-        - ✅ LNMP/LAMP环境安装脚本
         - ✅ Docker安装脚本 (针对Amazon Linux优化)
         - ✅ 数据库密码重置工具
         - ✅ 完整卸载脚本
